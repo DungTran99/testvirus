@@ -3,3 +3,4 @@ cryptography
 requests
 python-dotenv
 pillow
+flask_sqlalchemy
