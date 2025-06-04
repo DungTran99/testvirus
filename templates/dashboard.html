@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Dashboard quản lý ảnh</title>
+<title>Dashboard quản lý ảnh & client</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -27,6 +27,7 @@
     padding: 5px 10px;
     cursor: pointer;
     border-radius: 3px;
+    margin-right: 5px;
   }
   button.delete-btn:hover {
     background-color: #c0392b;
@@ -41,7 +42,7 @@
 </style>
 </head>
 <body>
-<h1>Dashboard quản lý ảnh gửi lên</h1>
+<h1>Dashboard quản lý ảnh gửi lên và quản lý client</h1>
 
 <label>Hostname: <input type="text" id="filterHostname" /></label>
 <label>IP: <input type="text" id="filterIP" /></label>
@@ -58,7 +59,8 @@
     <th>OS</th>
     <th>MAC</th>
     <th>Timestamp</th>
-    <th>Hành động</th>
+    <th>Hành động ảnh</th>
+    <th>Hành động client</th>
   </tr>
 </thead>
 <tbody></tbody>
@@ -98,21 +100,25 @@ async function loadImages() {
         <td>${img.os}</td>
         <td>${img.mac}</td>
         <td>${new Date(img.timestamp).toLocaleString()}</td>
-        <td><button class="delete-btn" data-id="${img.id}">Xóa</button></td>
+        <td>
+          <button class="delete-img-btn" data-id="${img.id}">Xóa ảnh</button>
+        </td>
+        <td>
+          <button class="uninstall-client-btn" data-hostname="${img.hostname}">Xóa client</button>
+        </td>
       `;
 
-      // Click dòng xem ảnh
+      // Click dòng xem ảnh (ngoại trừ khi bấm nút)
       tr.addEventListener("click", e => {
-        // tránh khi click nút xóa mới không xem ảnh
-        if(e.target.classList.contains("delete-btn")) return;
+        if(e.target.classList.contains("delete-img-btn") || e.target.classList.contains("uninstall-client-btn")) return;
         document.getElementById("preview").src = `/image/${img.filename}`;
       });
 
       tbody.appendChild(tr);
     });
 
-    // Gán sự kiện xóa cho từng nút
-    document.querySelectorAll(".delete-btn").forEach(btn => {
+    // Xử lý nút xóa ảnh
+    document.querySelectorAll(".delete-img-btn").forEach(btn => {
       btn.addEventListener("click", async (event) => {
         event.stopPropagation();
         const id = btn.getAttribute("data-id");
@@ -120,14 +126,35 @@ async function loadImages() {
           try {
             const res = await fetch(`/api/images/${id}`, { method: "DELETE" });
             if(res.ok) {
-              alert("Xóa thành công!");
-              loadImages(); // tải lại danh sách
+              alert("Xóa ảnh thành công!");
+              loadImages();
               document.getElementById("preview").src = "";
             } else {
-              alert(`Xóa thất bại: ${res.status}`);
+              alert(`Xóa ảnh thất bại: ${res.status}`);
             }
           } catch (err) {
-            alert("Lỗi khi gọi API xóa");
+            alert("Lỗi khi gọi API xóa ảnh");
+            console.error(err);
+          }
+        }
+      });
+    });
+
+    // Xử lý nút xóa client (gửi lệnh uninstall)
+    document.querySelectorAll(".uninstall-client-btn").forEach(btn => {
+      btn.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const hostname = btn.getAttribute("data-hostname");
+        if(confirm(`Bạn có chắc muốn gửi lệnh xóa client: ${hostname}?`)) {
+          try {
+            const res = await fetch(`/api/client/uninstall/${encodeURIComponent(hostname)}`, { method: "POST" });
+            if(res.ok) {
+              alert(`Đã gửi lệnh xóa client ${hostname} thành công!`);
+            } else {
+              alert(`Gửi lệnh thất bại: ${res.status}`);
+            }
+          } catch (err) {
+            alert("Lỗi khi gọi API xóa client");
             console.error(err);
           }
         }
