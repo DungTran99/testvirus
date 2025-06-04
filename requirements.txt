@@ -2,3 +2,4 @@ flask
 cryptography
 requests
 python-dotenv
+pillow
