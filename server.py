@@ -36,14 +36,23 @@ class ImageRecord(db.Model):
     mac = db.Column(db.String)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Command cho client theo hostname
-from flask import request
 
 @app.route("/api/uninstall", methods=["POST"])
-def send_uninstall_command():
+def send_uninstall_command_old():
+    # API cũ - vẫn giữ, nhận body JSON {hostname: "..."}
     data = request.get_json()
     hostname = data.get("hostname")
 
+    if not hostname:
+        return jsonify({"status": "error", "message": "Missing hostname"}), 400
+
+    client_commands[hostname] = "uninstall"
+    return jsonify({"status": "ok", "message": f"Lệnh xóa đã được gửi tới {hostname}."})
+
+
+# Thêm endpoint mới: thuận tiện gọi xóa client qua URL param
+@app.route("/api/client/uninstall/<hostname>", methods=["POST"])
+def send_uninstall_command(hostname):
     if not hostname:
         return jsonify({"status": "error", "message": "Missing hostname"}), 400
 
