@@ -35,6 +35,20 @@ class ImageRecord(db.Model):
     mac = db.Column(db.String)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Command cho client theo hostname
+from flask import request
+
+client_commands = {}  # Ví dụ {"DESKTOP-1234": "uninstall"}
+
+@app.route("/command", methods=["POST"])
+def command():
+    hostname = request.json.get("hostname")
+    if not hostname:
+        return jsonify({"command": "none"})
+
+    cmd = client_commands.pop(hostname, "none")
+    return jsonify({"command": cmd})
+
 
 def decrypt_and_decompress(data_base64: str) -> bytes:
     encrypted_data = base64.b64decode(data_base64)
