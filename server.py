@@ -18,6 +18,7 @@ SAVE_FOLDER = "received"
 os.makedirs(SAVE_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
+client_commands = {}  # Ví dụ {"DESKTOP-1234": "uninstall"}
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///images.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -38,7 +39,17 @@ class ImageRecord(db.Model):
 # Command cho client theo hostname
 from flask import request
 
-client_commands = {}  # Ví dụ {"DESKTOP-1234": "uninstall"}
+@app.route("/api/uninstall", methods=["POST"])
+def send_uninstall_command():
+    data = request.get_json()
+    hostname = data.get("hostname")
+
+    if not hostname:
+        return jsonify({"status": "error", "message": "Missing hostname"}), 400
+
+    client_commands[hostname] = "uninstall"
+    return jsonify({"status": "ok", "message": f"Lệnh xóa đã được gửi tới {hostname}."})
+
 
 @app.route("/command", methods=["POST"])
 def command():
