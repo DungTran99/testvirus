@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dashboard quản lý ảnh</title>
+<style>
+  table {border-collapse: collapse; width: 100%;}
+  th, td {padding: 8px; border: 1px solid #ccc; text-align: left;}
+  tr:hover {background-color: #f2f2f2;}
+  #preview {max-width: 300px; max-height: 300px; margin-top: 10px; border: 1px solid #ccc;}
+</style>
+</head>
+<body>
+<h1>Dashboard quản lý ảnh gửi lên</h1>
+
+<label>Hostname: <input type="text" id="filterHostname" /></label>
+<label>IP: <input type="text" id="filterIP" /></label>
+<label>Từ ngày: <input type="date" id="filterFromDate" /></label>
+<label>Đến ngày: <input type="date" id="filterToDate" /></label>
+<button onclick="loadImages()">Tìm kiếm</button>
+
+<table id="imagesTable">
+<thead>
+  <tr><th>ID</th><th>Hostname</th><th>IP</th><th>OS</th><th>MAC</th><th>Timestamp</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Ảnh xem trước:</h3>
+<img id="preview" src="" alt="Chọn ảnh để xem" />
+
+<script>
+async function loadImages() {
+  const hostname = document.getElementById("filterHostname").value;
+  const ip = document.getElementById("filterIP").value;
+  const fromDate = document.getElementById("filterFromDate").value;
+  const toDate = document.getElementById("filterToDate").value;
+
+  let url = `/api/images?limit=50&offset=0`;
+  if(hostname) url += `&hostname=${encodeURIComponent(hostname)}`;
+  if(ip) url += `&ip=${encodeURIComponent(ip)}`;
+  if(fromDate) url += `&from_date=${encodeURIComponent(fromDate)}`;
+  if(toDate) url += `&to_date=${encodeURIComponent(toDate)}`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  const tbody = document.querySelector("#imagesTable tbody");
+  tbody.innerHTML = "";
+
+  data.data.forEach(img => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${img.id}</td>
+      <td>${img.hostname}</td>
+      <td>${img.ip}</td>
+      <td>${img.os}</td>
+      <td>${img.mac}</td>
+      <td>${new Date(img.timestamp).toLocaleString()}</td>
+    `;
+    tr.style.cursor = "pointer";
+    tr.onclick = () => {
+      document.getElementById("preview").src = `/image/${img.filename}`;
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+window.onload = loadImages;
+</script>
+</body>
+</html>
