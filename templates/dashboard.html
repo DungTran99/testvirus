@@ -2,73 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Agent Dashboard tổng hợp</title>
+<title>Dashboard quản lý ảnh</title>
 <style>
-  img { max-width: 300px; margin-bottom: 10px; }
-  .card { display: inline-block; padding: 10px; border: 1px solid #ccc; margin: 10px; vertical-align: top; }
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
   table {border-collapse: collapse; width: 100%;}
-  th, td {padding: 8px; border: 1px solid #ccc; text-align: left;}
-  tr:hover {background-color: #f2f2f2;}
-  #preview {max-width: 300px; max-height: 300px; margin-top: 10px; border: 1px solid #ccc;}
+  th, td {
+    padding: 8px; border: 1px solid #ccc; text-align: left;
+  }
+  tr:hover {background-color: #f2f2f2; cursor: pointer;}
+  #preview {
+    max-width: 600px;
+    max-height: 400px;
+    margin-top: 10px;
+    border: 1px solid #ccc;
+    display: block;
+  }
+  button.delete-btn {
+    background-color: #e74c3c;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  button.delete-btn:hover {
+    background-color: #c0392b;
+  }
+  label {
+    margin-right: 10px;
+  }
+  input[type="text"], input[type="date"] {
+    padding: 5px;
+    margin-right: 15px;
+  }
 </style>
-<script>
-  function sendUninstall(hostname) {
-      if (!confirm("Bạn có chắc muốn xóa client này?")) return;
-      fetch('/api/uninstall', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostname })
-      }).then(res => res.json()).then(data => {
-          alert(data.message || "Đã gửi lệnh xóa.");
-      });
-  }
-
-  async function loadImages() {
-    const hostname = document.getElementById("filterHostname").value;
-    const ip = document.getElementById("filterIP").value;
-    const fromDate = document.getElementById("filterFromDate").value;
-    const toDate = document.getElementById("filterToDate").value;
-
-    let url = `/api/images?limit=50&offset=0`;
-    if(hostname) url += `&hostname=${encodeURIComponent(hostname)}`;
-    if(ip) url += `&ip=${encodeURIComponent(ip)}`;
-    if(fromDate) url += `&from_date=${encodeURIComponent(fromDate)}`;
-    if(toDate) url += `&to_date=${encodeURIComponent(toDate)}`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const tbody = document.querySelector("#imagesTable tbody");
-    tbody.innerHTML = "";
-
-    data.data.forEach(img => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${img.id}</td>
-        <td>${img.hostname}</td>
-        <td>${img.ip}</td>
-        <td>${img.os}</td>
-        <td>${img.mac}</td>
-        <td>${new Date(img.timestamp).toLocaleString()}</td>
-      `;
-      tr.style.cursor = "pointer";
-      tr.onclick = () => {
-        document.getElementById("preview").src = `/image/${img.filename}`;
-      }
-      tbody.appendChild(tr);
-    });
-  }
-
-  window.onload = () => {
-    loadImages();
-  }
-</script>
 </head>
 <body>
-
 <h1>Dashboard quản lý ảnh gửi lên</h1>
 
-<!-- Phần filter & bảng ảnh -->
 <label>Hostname: <input type="text" id="filterHostname" /></label>
 <label>IP: <input type="text" id="filterIP" /></label>
 <label>Từ ngày: <input type="date" id="filterFromDate" /></label>
@@ -77,7 +51,15 @@
 
 <table id="imagesTable">
 <thead>
-  <tr><th>ID</th><th>Hostname</th><th>IP</th><th>OS</th><th>MAC</th><th>Timestamp</th></tr>
+  <tr>
+    <th>ID</th>
+    <th>Hostname</th>
+    <th>IP</th>
+    <th>OS</th>
+    <th>MAC</th>
+    <th>Timestamp</th>
+    <th>Hành động</th>
+  </tr>
 </thead>
 <tbody></tbody>
 </table>
@@ -85,21 +67,80 @@
 <h3>Ảnh xem trước:</h3>
 <img id="preview" src="" alt="Chọn ảnh để xem" />
 
-<hr>
+<script>
+async function loadImages() {
+  const hostname = document.getElementById("filterHostname").value.trim();
+  const ip = document.getElementById("filterIP").value.trim();
+  const fromDate = document.getElementById("filterFromDate").value;
+  const toDate = document.getElementById("filterToDate").value;
 
-<!-- Phần recent ảnh dạng card -->
-<h2>Ảnh nhận gần đây</h2>
-<div id="recentImagesContainer">
-  <!-- Đây là phần server render, ví dụ với template engine -->
-  {% for img in images %}
-  <div class="card">
-      <strong>{{ img.hostname }}</strong><br>
-      {{ img.timestamp }}<br>
-      <img src="/image/{{ img.filename }}"><br>
-      <button onclick="sendUninstall('{{ img.hostname }}')">🗑️ Gỡ client</button>
-  </div>
-  {% endfor %}
-</div>
+  let url = `/api/images?limit=50&offset=0`;
+  if(hostname) url += `&hostname=${encodeURIComponent(hostname)}`;
+  if(ip) url += `&ip=${encodeURIComponent(ip)}`;
+  if(fromDate) url += `&from_date=${encodeURIComponent(fromDate)}`;
+  if(toDate) url += `&to_date=${encodeURIComponent(toDate)}`;
 
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+
+    const tbody = document.querySelector("#imagesTable tbody");
+    tbody.innerHTML = "";
+
+    data.data.forEach(img => {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${img.id}</td>
+        <td>${img.hostname}</td>
+        <td>${img.ip}</td>
+        <td>${img.os}</td>
+        <td>${img.mac}</td>
+        <td>${new Date(img.timestamp).toLocaleString()}</td>
+        <td><button class="delete-btn" data-id="${img.id}">Xóa</button></td>
+      `;
+
+      // Click dòng xem ảnh
+      tr.addEventListener("click", e => {
+        // tránh khi click nút xóa mới không xem ảnh
+        if(e.target.classList.contains("delete-btn")) return;
+        document.getElementById("preview").src = `/image/${img.filename}`;
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    // Gán sự kiện xóa cho từng nút
+    document.querySelectorAll(".delete-btn").forEach(btn => {
+      btn.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const id = btn.getAttribute("data-id");
+        if(confirm(`Bạn có chắc muốn xóa ảnh ID ${id}?`)) {
+          try {
+            const res = await fetch(`/api/images/${id}`, { method: "DELETE" });
+            if(res.ok) {
+              alert("Xóa thành công!");
+              loadImages(); // tải lại danh sách
+              document.getElementById("preview").src = "";
+            } else {
+              alert(`Xóa thất bại: ${res.status}`);
+            }
+          } catch (err) {
+            alert("Lỗi khi gọi API xóa");
+            console.error(err);
+          }
+        }
+      });
+    });
+
+  } catch (err) {
+    alert("Lỗi khi tải dữ liệu ảnh: " + err.message);
+    console.error(err);
+  }
+}
+
+window.onload = loadImages;
+</script>
 </body>
 </html>
